@@ -1,0 +1,9 @@
+[package]
+name = "yalteir"
+version = "0.1.0"
+authors = ["n3f4s <tiv.crb@gmail.com>"]
+
+[dependencies]
+nix = "0.9.0"
+libc="*"
+void="*"
