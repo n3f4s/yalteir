@@ -1,4 +1,3 @@
-
 extern crate nix;
 extern crate libc;
 extern crate core;
@@ -13,7 +12,11 @@ use nix::sys::select::FdSet;
 
 mod linux;
 
-// TODO faire une fenêtre wayland
+#[allow(non_camel_case_types)]
+#[allow(non_snake_case)]
+#[allow(non_upper_case_globals)]
+#[allow(dead_code)]
+mod x11;
 
 fn term_process(master: RawFd, child: nix::unistd::Pid) {
     let mut run = true;
