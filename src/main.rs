@@ -78,23 +78,43 @@ fn term_process(master: RawFd, child: nix::unistd::Pid) {
     let _ = nix::sys::signal::kill(child, nix::sys::signal::Signal::SIGKILL);
 }
 
-fn main() {
+fn fork_child(shell: String, slave: i32) -> nix::unistd::Pid {
+    use std::process::Command;
+    use nix::unistd::{Pid, setsid, dup2};
+    use std::io::{Error, ErrorKind};
+    return Pid::from_raw(Command::new(shell).before_exec(move || -> Result<(), std::io::Error>{
+        let _ = match setsid() {
+            Ok(gid) => gid,
+            Err(err) => return Err(Error::new(std::io::ErrorKind::Other, err))
+        };
+        let _ = match dup2(slave, STDIN_FILENO) {
+            Ok(fd) => fd,
+            Err(err) => return Err(Error::new(std::io::ErrorKind::Other, err))
+        };
+        let _ = match dup2(slave, STDERR_FILENO) {
+            Ok(fd) => fd,
+            Err(err) => return Err(Error::new(std::io::ErrorKind::Other, err))
+        };
+        let _ = match dup2(slave, STDOUT_FILENO) {
+            Ok(fd) => fd,
+            Err(err) => return Err(Error::new(std::io::ErrorKind::Other, err))
+        };
+        match linux::chdir(CString::new(
+            linux::getenv(
+                CString::new("HOME").unwrap()
+            ).unwrap()
+        ).unwrap()) {
+            Ok(_) => {},
+            Err(err) => return Err(Error::new(ErrorKind::Other, nix::Error::Sys(err)))
+        }
+        return Ok(())
+    }).spawn().unwrap().id() as i32);
+}
 
-    let mut term: libc::termios = libc::termios{
-        c_iflag: 0,
-        c_oflag: 0,
-        c_cflag: 0,
-        c_lflag: 0,
-        c_line: 0,
-        c_cc: [0; 32],
-        c_ispeed: 0,
-        c_ospeed: 0
-    };
-    unsafe {
-        libc::tcgetattr(STDIN_FILENO, &mut term as *mut libc::termios);
-        term.c_lflag &= !(libc::ECHO | libc::ECHONL | libc::ICANON);
-        libc::tcsetattr(STDIN_FILENO, libc::TCSAFLUSH, &mut term as *mut libc::termios);
-    }
+fn main() {
+    let mut term = linux::Termios::new(STDIN_FILENO);
+    term.term.c_lflag &= !(libc::ECHO | libc::ECHONL | libc::ICANON);
+    term.tcsetattr(STDIN_FILENO, libc::TCSAFLUSH);
 
     // slave -> term
     // master -> shell
@@ -109,35 +129,6 @@ fn main() {
     let slave = file_descriptors.slave;
 
     // FIXME get shell from getenv
-    let child = std::process::Command::new("/usr/bin/bash").before_exec(move || -> Result<(), std::io::Error>{
-        let _ = match nix::unistd::setsid() {
-            Ok(gid) => gid,
-            Err(err) => return Err(std::io::Error::new(std::io::ErrorKind::Other, err))
-        };
-        //println!("Shell: dup2({}, {})", slave, STDIN_FILENO);
-        let _ = match nix::unistd::dup2(slave, STDIN_FILENO) {
-            Ok(fd) => fd,
-            Err(err) => return Err(std::io::Error::new(std::io::ErrorKind::Other, err))
-        };
-        //println!("Shell: dup2({}, {})", slave, STDERR_FILENO);
-        let _ = match nix::unistd::dup2(slave, STDERR_FILENO) {
-            Ok(fd) => fd,
-            Err(err) => return Err(std::io::Error::new(std::io::ErrorKind::Other, err))
-        };
-        //println!("Shell: dup2({}, {})", slave, STDOUT_FILENO);
-        let _ = match nix::unistd::dup2(slave, STDOUT_FILENO) {
-            Ok(fd) => fd,
-            Err(err) => return Err(std::io::Error::new(std::io::ErrorKind::Other, err))
-        };
-        match linux::chdir(CString::new(
-            linux::getenv(
-                CString::new("HOME").unwrap()
-            ).unwrap()
-        ).unwrap()) {
-            Ok(_) => {},
-            Err(err) => return Err(std::io::Error::new(std::io::ErrorKind::Other, nix::Error::Sys(err)))
-        }
-        return Ok(())
-    }).spawn();
-    term_process(file_descriptors.master, nix::unistd::Pid::from_raw(child.unwrap().id() as i32));
+    let child = fork_child(std::string::String::from("/usr/bin/bash"), slave);
+    term_process(file_descriptors.master, child);
 }
