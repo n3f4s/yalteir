@@ -7,3 +7,6 @@ authors = ["n3f4s <tiv.crb@gmail.com>"]
 nix = "0.9.0"
 libc="*"
 void="*"
+#gtk="*"
+#wayland-client = "*"
+x11="*"
