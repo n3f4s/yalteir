@@ -28,3 +28,33 @@ pub fn getenv(var: std::ffi::CString) -> Option<std::ffi::CString> {
     }
 }
 
+pub struct Termios {
+    pub term: libc::termios,
+}
+
+impl Termios {
+    pub fn new(fd: i32) -> Termios {
+        let mut term: libc::termios = libc::termios{
+            c_iflag: 0,
+            c_oflag: 0,
+            c_cflag: 0,
+            c_lflag: 0,
+            c_line: 0,
+            c_cc: [0; 32],
+            c_ispeed: 0,
+            c_ospeed: 0
+        };
+        unsafe {
+            libc::tcgetattr(fd, &mut term as *mut libc::termios);
+        }
+        Termios {
+            term: term
+        }
+    }
+
+    pub fn tcsetattr(&mut self, fd: i32, opt_act: i32) {
+        unsafe {
+            libc::tcsetattr(fd, opt_act, &mut self.term as *mut libc::termios);
+        }
+    }
+}
